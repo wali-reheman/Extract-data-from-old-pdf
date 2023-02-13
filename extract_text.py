@@ -22,7 +22,7 @@ strings_to_search_for=['DISTRICT', 'TEHSIL', 'DIVISION', 'AGENCY', 'TALUKA','FR'
 
 extracted = pd.DataFrame()
 
-path = "/Users/wali/Documents/GA/Pakistan/Religion"
+path = "/Users/"
 file_list = os.listdir(path)
 print(file_list)
 
