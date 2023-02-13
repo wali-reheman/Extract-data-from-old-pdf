@@ -23,7 +23,7 @@ for i in district:
 
 print("DOWNLOAD MISSION COMPLETE")
 
-file_path = "/Users/wali/Documents/GA/Pakistan/Religion"
+file_path = "/Users/..." #Your path
 file_list = os.listdir(file_path)
 print(file_list)
 
