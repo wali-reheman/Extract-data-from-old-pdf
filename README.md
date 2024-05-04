@@ -3,7 +3,9 @@
 
 ## Project Overview
 
-This repository contains scripts for downloading and processing PDF files from the Pakistan census. The process involves extracting data from downloaded PDFs and converting this information into structured formats suitable for analysis. Note that extracting text from old pdf file could be very messy, if requires many times of adjustment to accommodate codes to random changes in the formats of pdf file.
+Extracting table from old pdf file could be very messy, if requires many times of adjustment to accommodate random changes in the formats of pdf file.
+
+This repository contains scripts for downloading and processing PDF files from the Pakistan census as an example. The process involves extracting data from downloaded PDFs and converting this information into structured formats suitable for analysis. 
 
 The main components include:
 
