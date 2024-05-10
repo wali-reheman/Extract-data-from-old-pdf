@@ -1,9 +1,9 @@
 
-# Extract Tables and Data from Old PDFs
+# Extract Tables and Data from old PDFs
 
 ## Project Overview
 
-Extracting table from old pdf file could be very messy, if requires many times of adjustment to accommodate random changes in the formats of pdf file.
+Extracting tables from old image pdf files could be a very messy process, if requires many times of adjustment to accommodate random changes in the formats of pdf file.
 
 This repository contains scripts for downloading and processing PDF files from the Pakistan census as an example. The process involves extracting data from downloaded PDFs and converting this information into structured formats suitable for analysis. 
 
