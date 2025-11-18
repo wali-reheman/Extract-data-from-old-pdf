@@ -2,7 +2,26 @@
 
 Get the PDF Data Extractor running on your Mac in 2 minutes!
 
-## 📋 Prerequisites
+## 🎯 Want a Double-Click App? (New!)
+
+**Create a standalone macOS application** that works like any other Mac app:
+
+```bash
+cd /path/to/Extract-data-from-old-pdf
+bash create_standalone_app.sh
+```
+
+This creates **`PDF Data Extractor.app`** with all dependencies embedded:
+- ✅ Just double-click to run
+- ✅ No installation needed
+- ✅ Drag to Applications folder
+- ✅ Share with others easily
+
+**📖 Full guide:** See [CREATE_STANDALONE_APP.md](CREATE_STANDALONE_APP.md) for detailed instructions.
+
+---
+
+## 📋 Prerequisites (for manual setup)
 
 1. **Python 3.8 or higher** (usually pre-installed on MacOS)
    - Check version: Open Terminal and type `python3 --version`
