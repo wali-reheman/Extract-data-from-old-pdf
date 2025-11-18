@@ -26,8 +26,47 @@ Originally developed for Pakistan census data, it's now generalized to handle va
 - ✅ **CLI & API**: Use via command line or as a Python library
 - ✅ **Robust**: Retry logic, error handling, and progress tracking
 - ✅ **Well-Documented**: Comprehensive guides and examples
+- 🆕 **Web UI**: Beautiful drag-and-drop interface powered by Streamlit
+- 🆕 **Standalone App**: Create a double-click macOS application
 
-## Quick Start
+## 🎯 NEW: Web Interface & Standalone App
+
+### Interactive Web UI
+
+A user-friendly web interface for easy PDF data extraction:
+
+```bash
+streamlit run app.py
+```
+
+**Features:**
+- 🖱️ Drag & drop PDF upload
+- 👁️ Live data preview
+- 📊 Statistics dashboard
+- 💾 Download as Excel or CSV
+- 🌍 Supports English, French, and Cyrillic text
+- 🚀 100% local - your data never leaves your computer
+
+**Quick Start:** See [UI_README.md](UI_README.md) or [QUICKSTART_MACOS.md](QUICKSTART_MACOS.md)
+
+### macOS Standalone Application
+
+Create a double-click `.app` with all dependencies embedded:
+
+```bash
+bash create_standalone_app.sh
+```
+
+This creates `PDF Data Extractor.app` that:
+- ✅ Works like any Mac app - just double-click
+- ✅ Includes all dependencies - no installation needed
+- ✅ Can be shared with others or moved to Applications folder
+
+**Full Guide:** See [CREATE_STANDALONE_APP.md](CREATE_STANDALONE_APP.md)
+
+---
+
+## Quick Start (Command Line)
 
 ### Installation
 
