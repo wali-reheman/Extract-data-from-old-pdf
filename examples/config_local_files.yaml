@@ -1,0 +1,56 @@
+# Configuration for Processing Local PDF Files
+# Use this when you already have PDFs downloaded and want to process them
+
+# Download section is not used when processing local files
+download:
+  output_dir: "./downloads"
+  verify_ssl: true
+  timeout: 30
+
+conversion:
+  output_dir: "./images/local"
+  image_format: "JPEG"
+  dpi: 300
+
+ocr:
+  engine: "tesseract"
+  tesseract_config: "--psm 6 --oem 1"
+  preprocessing:
+    grayscale: true
+    resize_factor: 1.2
+    interpolation: "cubic"
+
+parsing:
+  data_format: "census"  # Change to "election" or "generic" as needed
+  keywords:
+    census:
+      - "DISTRICT"
+      - "REGION"
+      - "AREA"
+      - "DIVISION"
+    election:
+      - "CONSTITUENCY"
+      - "POLLING"
+      - "STATION"
+  column_mappings:
+    census_religion_7:
+      - "CATEGORY"
+      - "TOTAL"
+      - "GROUP_1"
+      - "GROUP_2"
+      - "GROUP_3"
+      - "GROUP_4"
+      - "GROUP_5"
+  filters:
+    - "TOTAL"
+    - "OVERALL"
+
+export:
+  output_dir: "./output/local"
+  format: "csv"  # CSV is often easier for manual inspection
+  output_filename: "extracted_data"
+
+logging:
+  level: "DEBUG"  # Use DEBUG for troubleshooting
+  file: "local_extraction.log"
+  console: true

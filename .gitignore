@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Output files
+*.pdf
+*.jpg
+*.jpeg
+*.png
+*.xlsx
+*.csv
+*.json
+logfile.log
+*.log
+
+# Temp directories
+temp/
+tmp/
+downloads/
+output/
+data/
+images/
+
+# Configuration (keep examples)
+config.yaml
+!examples/config_*.yaml
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
