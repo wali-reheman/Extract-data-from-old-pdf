@@ -1,0 +1,76 @@
+# Test Configuration - Limited to 2 districts for quick demo
+download:
+  base_url: "https://www.pbs.gov.pk/sites/default/files/population/2017/results/"
+  file_pattern: "{district_code}{data_type}.pdf"
+  district_range: [1, 2]  # Only districts 001 and 002 for testing
+  data_type: "09"
+  output_dir: "./test_downloads"
+  delay_seconds: 2
+  verify_ssl: true
+  timeout: 30
+
+conversion:
+  output_dir: "./test_images"
+  image_format: "JPEG"
+  dpi: 200  # Lower DPI for faster processing in demo
+
+ocr:
+  engine: "tesseract"
+  tesseract_config: "--psm 6 --oem 1"
+  preprocessing:
+    grayscale: true
+    resize_factor: 1.2
+    interpolation: "cubic"
+
+parsing:
+  data_format: "census"
+  keywords:
+    census:
+      - "FR"
+      - "DISTRICT"
+      - "TEHSIL"
+      - "DIVISION"
+      - "AGENCY"
+      - "TALUKA"
+  column_mappings:
+    census_religion_7:
+      - "SEX"
+      - "TOTAL"
+      - "MUSLIM"
+      - "CHRISTIAN"
+      - "HINDU"
+      - "QADIANI/AHMADI"
+      - "CASTE/SCHEDULED"
+    census_religion_8:
+      - "SEX"
+      - "TOTAL"
+      - "MUSLIM"
+      - "CHRISTIAN"
+      - "HINDU"
+      - "QADIANI/AHMADI"
+      - "CASTE/SCHEDULED"
+      - "OTHERS"
+    census_religion_9:
+      - "SEX"
+      - "TOTAL"
+      - "MUSLIM"
+      - "CHRISTIAN"
+      - "HINDU"
+      - "QADIANI/AHMADI"
+      - "CASTE/SCHEDULED"
+      - "OTHERS"
+      - "EXTRACOL"
+  filters:
+    - "OVERALL"
+    - "RURAL"
+    - "URBAN"
+
+export:
+  output_dir: "./test_output"
+  format: "excel"
+  output_filename: "test_census_extract"
+
+logging:
+  level: "INFO"
+  file: "test_extraction.log"
+  console: true

@@ -66,7 +66,7 @@ class PDFDownloader:
         logger.info(f"Download complete: {len(downloaded_files)}/{len(district_codes)} files")
         return downloaded_files
 
-    def download_file(self, url: str, output_path: Path, max_retries: 3) -> bool:
+    def download_file(self, url: str, output_path: Path, max_retries: int = 3) -> bool:
         """Download a single file with retry logic
 
         Args:
