@@ -1,0 +1,33 @@
+# Configuration to extract ALL data from the PDF (no filtering)
+download:
+  output_dir: "./downloads"
+
+conversion:
+  output_dir: "./images"
+  image_format: "JPEG"
+  dpi: 300
+
+ocr:
+  engine: "tesseract"
+  tesseract_config: "--psm 6 --oem 1"
+  preprocessing:
+    grayscale: true
+    resize_factor: 1.2
+    interpolation: "cubic"
+
+parsing:
+  data_format: "generic"  # Use generic to get everything
+  keywords:
+    census: []  # Empty to process all lines
+  column_mappings: {}
+  filters: []  # NO FILTERS - extract everything
+
+export:
+  output_dir: "./output"
+  format: "excel"
+  output_filename: "complete_extraction"
+
+logging:
+  level: "INFO"
+  file: "extraction.log"
+  console: true
