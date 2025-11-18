@@ -100,16 +100,15 @@ BUNDLE_PATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
 RESOURCES_PATH="${BUNDLE_PATH}/Resources"
 PYTHON_VENV="${BUNDLE_PATH}/Frameworks/python-venv"
 
+# Change to Resources directory - this is where app.py and extract_universal.py are
+cd "${RESOURCES_PATH}"
+
+# Clear any environment variables that might interfere with package imports
+unset PYTHONPATH
+unset PYTHONHOME
+
 # Activate the embedded Python environment
 source "${PYTHON_VENV}/bin/activate"
-
-# Create a clean working directory to avoid import conflicts
-# (Running from a temp dir ensures no local numpy/pandas source interferes)
-WORK_DIR=$(mktemp -d)
-cd "${WORK_DIR}"
-
-# Clear any conflicting environment variables that might interfere with imports
-unset PYTHONPATH
 
 # Function to check if port is in use
 port_in_use() {
@@ -123,9 +122,9 @@ if port_in_use; then
     sleep 1
 fi
 
-# Start Streamlit with absolute path to app
+# Start Streamlit from Resources directory
 echo "Starting PDF Data Extractor..."
-python -m streamlit run "${RESOURCES_PATH}/app.py" \
+python -m streamlit run app.py \
     --server.headless true \
     --server.port 8501 \
     --browser.gatherUsageStats false &
@@ -153,8 +152,6 @@ APPLESCRIPT
 kill $STREAMLIT_PID 2>/dev/null || true
 
 # Cleanup
-cd /
-rm -rf "${WORK_DIR}"
 deactivate
 LAUNCHER_EOF
 
