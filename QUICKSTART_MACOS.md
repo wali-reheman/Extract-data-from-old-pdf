@@ -105,6 +105,34 @@ Drag the launcher script or Automator app to your Dock for quick access!
 
 ## 🔧 Troubleshooting
 
+### 🔍 First Step: Run Diagnostics
+If you encounter any errors, run this diagnostic script first:
+```bash
+python3 test_environment.py
+```
+This will check your Python environment and show which packages are installed.
+
+### "No module named 'pdfplumber'" Error
+This means the package isn't installed in the Python environment Streamlit is using.
+
+**Solution 1 - Check which Python Streamlit uses:**
+1. Open the app (it will show an error)
+2. Click "Debug Information" in the sidebar
+3. Note the Python path shown
+4. Install packages to that specific Python:
+   ```bash
+   /path/to/python -m pip install -r requirements.txt
+   ```
+
+**Solution 2 - Use virtual environment:**
+```bash
+cd /path/to/Extract-data-from-old-pdf
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+streamlit run app.py
+```
+
 ### "python3: command not found"
 Install Python from [python.org](https://www.python.org/downloads/macos/)
 
@@ -124,9 +152,10 @@ streamlit run app.py --server.port 8502
 ```
 
 ### App won't start
-1. Update pip: `pip3 install --upgrade pip`
-2. Reinstall: `pip3 install -r requirements.txt --force-reinstall`
-3. Restart Terminal
+1. Run diagnostics: `python3 test_environment.py`
+2. Update pip: `pip3 install --upgrade pip`
+3. Reinstall: `pip3 install -r requirements.txt --force-reinstall`
+4. Restart Terminal
 
 ## 📱 Using with Safari/Chrome
 

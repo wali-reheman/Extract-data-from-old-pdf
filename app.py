@@ -13,6 +13,7 @@ from pathlib import Path
 import io
 import time
 import subprocess
+import traceback
 
 # Auto-install missing dependencies
 def ensure_dependencies():
@@ -48,9 +49,6 @@ def ensure_dependencies():
 
 # Check dependencies on startup
 ensure_dependencies()
-
-# Import the extraction functions (after ensuring dependencies)
-from extract_universal import try_pdfplumber, smart_parse_table
 
 # Page configuration
 st.set_page_config(
@@ -123,6 +121,9 @@ def extract_from_pdf(pdf_file):
 
     # Extract data
     try:
+        # Import extraction functions (deferred to catch import errors)
+        from extract_universal import try_pdfplumber, smart_parse_table
+
         # Step 1: Extract rows
         rows, success = try_pdfplumber(str(temp_path))
 
@@ -155,7 +156,10 @@ def extract_from_pdf(pdf_file):
         return df, None
 
     except Exception as e:
-        return None, f"Error processing PDF: {str(e)}"
+        # Get full traceback for debugging
+        tb = traceback.format_exc()
+        error_msg = f"Error processing PDF: {str(e)}\n\nFull traceback:\n{tb}"
+        return None, error_msg
 
 
 def main():
@@ -165,6 +169,36 @@ def main():
 
     # Sidebar
     with st.sidebar:
+        st.header("🔍 System Info")
+
+        # Debug information
+        with st.expander("Debug Information", expanded=False):
+            st.code(f"Python: {sys.executable}")
+            st.code(f"Version: {sys.version.split()[0]}")
+
+            # Test pdfplumber import
+            try:
+                import pdfplumber
+                st.success("✓ pdfplumber: INSTALLED")
+                st.code(f"Location: {pdfplumber.__file__}")
+            except ImportError as e:
+                st.error("✗ pdfplumber: NOT FOUND")
+                st.code(f"Error: {str(e)}")
+            except Exception as e:
+                st.warning(f"✗ pdfplumber: ERROR - {str(e)}")
+
+            # Test extract_universal import
+            try:
+                from extract_universal import try_pdfplumber as test_func
+                st.success("✓ extract_universal: IMPORTED")
+            except ImportError as e:
+                st.error("✗ extract_universal: IMPORT FAILED")
+                st.code(f"Error: {str(e)}")
+            except Exception as e:
+                st.warning(f"✗ extract_universal: ERROR - {str(e)}")
+
+        st.divider()
+
         st.header("ℹ️ About")
         st.markdown("""
         This tool automatically extracts census and election data from PDF files.
@@ -270,7 +304,9 @@ def main():
                 df, error = extract_from_pdf(uploaded_file)
 
                 if error:
-                    st.error(f"❌ {error}")
+                    st.error("❌ Extraction Failed")
+                    with st.expander("View Error Details", expanded=True):
+                        st.code(error, language="python")
                     progress_bar.empty()
                     status_text.empty()
                 else:
