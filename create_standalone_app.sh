@@ -73,7 +73,10 @@ echo ""
 echo "[4/7] Installing dependencies in embedded environment..."
 source "${APP_PATH}/Contents/Frameworks/python-venv/bin/activate"
 pip install --upgrade pip -q
-pip install -r requirements.txt -q
+# Install numpy first to avoid import conflicts
+pip install --no-cache-dir numpy -q
+# Then install all requirements
+pip install --no-cache-dir -r requirements.txt -q
 deactivate
 echo "✓ Dependencies installed"
 echo ""
@@ -100,8 +103,13 @@ PYTHON_VENV="${BUNDLE_PATH}/Frameworks/python-venv"
 # Activate the embedded Python environment
 source "${PYTHON_VENV}/bin/activate"
 
-# Change to resources directory
-cd "${RESOURCES_PATH}"
+# Create a clean working directory to avoid import conflicts
+# (Running from a temp dir ensures no local numpy/pandas source interferes)
+WORK_DIR=$(mktemp -d)
+cd "${WORK_DIR}"
+
+# Clear any conflicting environment variables that might interfere with imports
+unset PYTHONPATH
 
 # Function to check if port is in use
 port_in_use() {
@@ -115,9 +123,9 @@ if port_in_use; then
     sleep 1
 fi
 
-# Start Streamlit
+# Start Streamlit with absolute path to app
 echo "Starting PDF Data Extractor..."
-python -m streamlit run app.py \
+python -m streamlit run "${RESOURCES_PATH}/app.py" \
     --server.headless true \
     --server.port 8501 \
     --browser.gatherUsageStats false &
@@ -145,6 +153,8 @@ APPLESCRIPT
 kill $STREAMLIT_PID 2>/dev/null || true
 
 # Cleanup
+cd /
+rm -rf "${WORK_DIR}"
 deactivate
 LAUNCHER_EOF
 
