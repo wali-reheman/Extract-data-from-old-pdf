@@ -85,6 +85,7 @@ echo ""
 echo "[5/7] Copying application files..."
 cp -r app.py "${APP_PATH}/Contents/Resources/"
 cp -r extract_universal.py "${APP_PATH}/Contents/Resources/"
+cp -r extract_hierarchical.py "${APP_PATH}/Contents/Resources/"
 cp -r requirements.txt "${APP_PATH}/Contents/Resources/"
 cp -r README.md "${APP_PATH}/Contents/Resources/" 2>/dev/null || true
 echo "✓ Application files copied"
