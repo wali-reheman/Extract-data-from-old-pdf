@@ -14,5 +14,7 @@ tqdm>=4.65.0
 # Web UI
 streamlit>=1.28.0
 
-# Optional: For enhanced OCR
-# easyocr>=1.7.0  # Uncomment for alternative OCR engine
+# Optional: For enhanced OCR with AI
+paddleocr>=2.7.0  # Free AI-powered OCR with table structure recognition
+paddlepaddle>=2.5.0  # Required by PaddleOCR
+# easyocr>=1.7.0  # Alternative OCR engine

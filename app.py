@@ -111,55 +111,179 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-def extract_from_pdf(pdf_file):
-    """Extract data from uploaded PDF file"""
+def extract_from_pdf(pdf_file, use_ai_fallback=True):
+    """Extract data from uploaded PDF file with hierarchical detection and AI fallback"""
 
     # Save uploaded file temporarily
     temp_path = Path(f"/tmp/{pdf_file.name}")
     with open(temp_path, "wb") as f:
         f.write(pdf_file.getbuffer())
 
+    method_used = "Unknown"
+
     # Extract data
     try:
-        # Import extraction functions (deferred to catch import errors)
+        # METHOD 1: Try hierarchical extractor first (best for structured PDFs)
+        import pdfplumber
+        import re
+
+        with pdfplumber.open(str(temp_path)) as pdf:
+            page = pdf.pages[0]
+            text = page.extract_text()
+
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+
+        # Find header and data start
+        data_start_idx = 0
+        for i, line in enumerate(lines):
+            if re.match(r'^1\s+2\s+3\s+4', line):
+                data_start_idx = i + 1
+                break
+
+        # Process data rows with hierarchical structure
+        rows = []
+        current_region = None
+        current_section = None
+
+        for line in lines[data_start_idx:]:
+            # Check for region headers
+            if 'DISTRICT' in line or 'SUB-DIVISION' in line:
+                current_region = line
+                continue
+
+            # Check for section headers
+            if line in ['OVERALL', 'RURAL', 'URBAN']:
+                current_section = line
+                continue
+
+            # Check for data rows (start with sex category)
+            sex_categories = ['ALL SEXES', 'MALE', 'FEMALE', 'TRANSGENDER']
+            found_sex = None
+            for sex in sex_categories:
+                if line.startswith(sex):
+                    found_sex = sex
+                    break
+
+            if found_sex:
+                # Remove the sex category from the line to get just the data
+                data_part = line[len(found_sex):].strip()
+
+                # Split by whitespace
+                tokens = data_part.split()
+
+                # Clean and parse numbers (handle commas and dashes)
+                values = []
+                for token in tokens:
+                    token = token.replace(',', '')
+                    if token == '-' or token == '':
+                        values.append(None)
+                    else:
+                        try:
+                            values.append(int(token))
+                        except:
+                            try:
+                                values.append(float(token))
+                            except:
+                                continue
+
+                # Ensure we have exactly 7 data columns
+                while len(values) < 7:
+                    values.append(None)
+                values = values[:7]
+
+                # Create row
+                row = [current_region, current_section, found_sex] + values
+                rows.append(row)
+
+        # Create DataFrame with hierarchical columns
+        if rows:
+            headers = ['REGION', 'SECTION', 'AREA/SEX', 'TOTAL', 'MUSLIM', 'CHRISTIAN',
+                      'HINDU', 'QADIANI/AHMADI', 'SCHEDULED CASTES', 'OTHERS']
+            df = pd.DataFrame(rows, columns=headers)
+
+            # Forward fill hierarchical columns
+            df['REGION'] = df['REGION'].ffill()
+            df['SECTION'] = df['SECTION'].ffill()
+
+            method_used = "Hierarchical Parser"
+
+            # Clean up temp file
+            temp_path.unlink()
+
+            return df, None, method_used
+
+        # If hierarchical extraction didn't work, try universal extractor
         from extract_universal import try_pdfplumber, smart_parse_table
 
-        # Step 1: Extract rows
         rows, success = try_pdfplumber(str(temp_path))
 
-        if not success or not rows:
-            return None, "Failed to extract data from PDF"
+        if success and rows:
+            headers, data_rows = smart_parse_table(rows)
 
-        # Step 2: Parse table
-        headers, data_rows = smart_parse_table(rows)
+            if data_rows:
+                max_cols = max(len(row) for row in data_rows)
 
-        if not data_rows:
-            return None, "No data rows found in PDF"
+                while len(headers) < max_cols:
+                    headers.append(f'Column_{len(headers)+1}')
 
-        # Step 3: Create DataFrame
-        # Normalize row lengths
-        max_cols = max(len(row) for row in data_rows)
+                for row in data_rows:
+                    while len(row) < max_cols:
+                        row.append(None)
 
-        while len(headers) < max_cols:
-            headers.append(f'Column_{len(headers)+1}')
+                df = pd.DataFrame(data_rows, columns=headers[:max_cols])
+                df = df.drop_duplicates()
 
-        for row in data_rows:
-            while len(row) < max_cols:
-                row.append(None)
+                method_used = "Universal Parser"
+                temp_path.unlink()
 
-        df = pd.DataFrame(data_rows, columns=headers[:max_cols])
-        df = df.drop_duplicates()
+                return df, None, method_used
 
-        # Clean up temp file
+        # METHOD 2: AI Fallback with PaddleOCR (if enabled)
+        if use_ai_fallback:
+            try:
+                import paddleocr
+                import cv2
+                import numpy as np
+                from pdf2image import convert_from_path
+
+                # Convert PDF to image
+                images = convert_from_path(str(temp_path), dpi=300)
+
+                # Initialize PaddleOCR
+                ocr = paddleocr.PaddleOCR(use_angle_cls=True, lang='en', show_log=False)
+
+                # Perform OCR with table structure recognition
+                img_array = np.array(images[0])
+                result = ocr.ocr(img_array, cls=True)
+
+                # Parse OCR results into structured data
+                # (This is a simplified version - can be enhanced)
+                rows = []
+                for line in result:
+                    for word_info in line:
+                        text = word_info[1][0]
+                        rows.append([text])
+
+                if rows:
+                    df = pd.DataFrame(rows, columns=['Extracted_Text'])
+                    method_used = "AI (PaddleOCR)"
+                    temp_path.unlink()
+                    return df, None, method_used
+
+            except ImportError:
+                pass  # PaddleOCR not installed, skip AI fallback
+            except Exception as e:
+                pass  # AI extraction failed, will return error below
+
+        # If all methods failed
         temp_path.unlink()
-
-        return df, None
+        return None, "Failed to extract data from PDF with all available methods", method_used
 
     except Exception as e:
         # Get full traceback for debugging
         tb = traceback.format_exc()
         error_msg = f"Error processing PDF: {str(e)}\n\nFull traceback:\n{tb}"
-        return None, error_msg
+        return None, error_msg, method_used
 
 
 def main():
@@ -301,7 +425,7 @@ def main():
                 progress_bar.progress(50)
 
                 # Extract data
-                df, error = extract_from_pdf(uploaded_file)
+                df, error, method_used = extract_from_pdf(uploaded_file)
 
                 if error:
                     st.error("❌ Extraction Failed")
@@ -323,8 +447,9 @@ def main():
                     progress_bar.empty()
                     status_text.empty()
 
-                    # Success message
-                    st.markdown(f'<div class="success-box">✅ Successfully extracted <strong>{len(df):,}</strong> rows with <strong>{len(df.columns)}</strong> columns!</div>', unsafe_allow_html=True)
+                    # Success message with method used
+                    method_icon = "🤖" if "AI" in method_used else "📊"
+                    st.markdown(f'<div class="success-box">✅ Successfully extracted <strong>{len(df):,}</strong> rows with <strong>{len(df.columns)}</strong> columns!<br>{method_icon} Method: <strong>{method_used}</strong></div>', unsafe_allow_html=True)
 
                     # Metrics
                     st.subheader("📈 Extraction Summary")
