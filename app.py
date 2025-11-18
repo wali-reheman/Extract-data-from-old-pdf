@@ -12,8 +12,44 @@ import sys
 from pathlib import Path
 import io
 import time
+import subprocess
 
-# Import the extraction functions
+# Auto-install missing dependencies
+def ensure_dependencies():
+    """Ensure all required packages are installed"""
+    required_packages = {
+        'pdfplumber': 'pdfplumber',
+        'pdf2image': 'pdf2image',
+        'PIL': 'Pillow',
+        'cv2': 'opencv-python',
+        'pytesseract': 'pytesseract',
+        'openpyxl': 'openpyxl',
+    }
+
+    missing = []
+    for module, package in required_packages.items():
+        try:
+            __import__(module)
+        except ImportError:
+            missing.append(package)
+
+    if missing:
+        with st.spinner(f"Installing missing packages: {', '.join(missing)}..."):
+            try:
+                subprocess.check_call([
+                    sys.executable, "-m", "pip", "install", *missing, "-q"
+                ])
+                st.success(f"✓ Installed {len(missing)} package(s). Please refresh the page.")
+                st.stop()
+            except Exception as e:
+                st.error(f"Failed to install packages: {e}")
+                st.info("Please run: pip install -r requirements.txt")
+                st.stop()
+
+# Check dependencies on startup
+ensure_dependencies()
+
+# Import the extraction functions (after ensuring dependencies)
 from extract_universal import try_pdfplumber, smart_parse_table
 
 # Page configuration
