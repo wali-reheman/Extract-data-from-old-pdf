@@ -132,7 +132,8 @@ def smart_parse_table(rows: List[List[str]]) -> Tuple[List[str], List[List[Any]]
 
     header_candidates = []
     data_candidates = []
-    metadata_context = {}
+    current_region = None
+    current_section = None
 
     for row in rows:
         row_text = ' '.join(str(cell) for cell in row)
@@ -143,11 +144,11 @@ def smart_parse_table(rows: List[List[str]]) -> Tuple[List[str], List[List[Any]]
         words = re.findall(r'\b[A-Za-z]{3,}\b', row_text)
         words_count = len(words)
 
-        # Header detection (has relevant keywords but few numbers)
-        header_keywords = ['TABLE', 'TOTAL', 'POPULATION', 'COUNT', 'NUMBER',
-                          'SEX', 'GENDER', 'AGE', 'AREA', 'REGION', 'DISTRICT',
-                          'VOTERS', 'VOTES', 'PERCENTAGE', 'RELIGION', 'CATEGORY',
-                          'TYPE', 'COLUMN', 'MALE', 'FEMALE']
+        # Header detection (has relevant keywords but NO numbers)
+        # Avoid keywords that appear in data rows (SEX, MALE, FEMALE)
+        header_keywords = ['TABLE', 'POPULATION', 'COUNT',
+                          'AREA/', 'REGION', 'DISTRICT', 'COLUMN',
+                          'VOTERS', 'VOTES', 'PERCENTAGE', 'RELIGION', 'CATEGORY']
 
         has_header = any(kw in row_text.upper() for kw in header_keywords)
 
@@ -157,19 +158,34 @@ def smart_parse_table(rows: List[List[str]]) -> Tuple[List[str], List[List[Any]]
 
         is_section = any(kw in row_text.upper() for kw in section_keywords) and numbers_count == 0
 
-        # Data rows: Mix of text and numbers (lowered threshold to catch more rows)
-        has_data = numbers_count >= 1 and words_count >= 1  # At least 1 number + 1 word
+        # Data rows: Pattern is TEXT followed by numbers/dashes
+        # Count dashes (which represent null/zero values in data rows)
+        dashes = row_text.count('-')
+
+        # Data row if it has:
+        # 1. Numbers and words, OR
+        # 2. Multiple dashes (like "- - - - -" which is valid census data), OR
+        # 3. Words with any numeric content (numbers or dashes)
+        has_numeric_content = numbers_count >= 1 or dashes >= 3
+        has_data = (words_count >= 1 and has_numeric_content)
 
         # Classification
         if has_header and numbers_count == 0:  # Headers have NO large numbers
             header_candidates.append(row)
         elif is_section:
-            # Track section context
-            for keyword in section_keywords:
-                if keyword in row_text.upper():
-                    metadata_context['section'] = row_text
+            # Track section/region context
+            if 'DISTRICT' in row_text.upper() or 'DIVISION' in row_text.upper():
+                current_region = row_text
+                current_section = None
+            else:
+                current_section = row_text
         elif has_data:
-            data_candidates.append(row)
+            # Add context to data row
+            data_candidates.append({
+                'region': current_region,
+                'section': current_section,
+                'row': row
+            })
 
     # Choose best header (look for one with column-like structure)
     best_header = None
@@ -194,16 +210,34 @@ def smart_parse_table(rows: List[List[str]]) -> Tuple[List[str], List[List[Any]]
         if len(parts) < 5:
             # Split on single space if multi-space didn't work
             parts = header_text.split()
-        headers = [p.strip() for p in parts if p.strip()]
+
+        # Combine short adjacent words (like "AREA/" + "SEX" → "AREA/SEX")
+        combined_headers = []
+        i = 0
+        while i < len(parts):
+            if i < len(parts) - 1 and len(parts[i]) <= 6 and '/' in parts[i]:
+                # Combine this with next (e.g., "AREA/" + "SEX")
+                combined_headers.append(parts[i] + parts[i+1])
+                i += 2
+            else:
+                combined_headers.append(parts[i])
+                i += 1
+
+        headers = [h.strip() for h in combined_headers if h.strip()]
     else:
         # Generate generic headers
         max_cols = max(len(row) for row in rows) if rows else 0
         headers = [f'Column_{i+1}' for i in range(max_cols)]
 
-    # Parse data rows - extract ALL fields (text labels + numbers)
+    # Parse data rows - extract ALL fields (text labels + numbers) with context
     parsed_data = []
 
-    for row in data_candidates:
+    for item in data_candidates:
+        # Extract context and row
+        region = item.get('region', '')
+        section = item.get('section', '')
+        row = item.get('row', item)  # Fallback if item is just a row
+
         # For single-cell rows, split on whitespace to extract all fields
         if len(row) == 1:
             # Split into words and numbers
@@ -212,7 +246,11 @@ def smart_parse_table(rows: List[List[str]]) -> Tuple[List[str], List[List[Any]]
         else:
             parts = row
 
-        parsed_row = []
+        # Start with context columns
+        parsed_row = [region or '', section or '']
+
+        # First pass: Parse all parts
+        temp_values = []
         for part in parts:
             part_str = str(part).strip()
 
@@ -229,21 +267,45 @@ def smart_parse_table(rows: List[List[str]]) -> Tuple[List[str], List[List[Any]]
 
             # Check if it's a number
             if clean == '-' or clean == '—':
-                parsed_row.append(None)
+                temp_values.append(None)
             elif clean.replace('.', '').isdigit():
                 try:
                     if '.' in clean:
-                        parsed_row.append(float(clean))
+                        temp_values.append(float(clean))
                     else:
-                        parsed_row.append(int(clean))
+                        temp_values.append(int(clean))
                 except ValueError:
-                    parsed_row.append(part_str)
+                    temp_values.append(part_str)
             else:
                 # Keep as text (e.g., "ALL", "MALE", "FEMALE")
-                parsed_row.append(part_str)
+                temp_values.append(part_str)
 
-        if parsed_row and any(x is not None for x in parsed_row):
+        # Second pass: Combine multi-word patterns
+        # Common patterns: "ALL SEXES", etc.
+        combined_values = []
+        i = 0
+        while i < len(temp_values):
+            if (i < len(temp_values) - 1 and
+                isinstance(temp_values[i], str) and
+                isinstance(temp_values[i+1], str) and
+                temp_values[i].upper() == 'ALL' and
+                temp_values[i+1].upper() == 'SEXES'):
+                # Combine "ALL" + "SEXES"
+                combined_values.append('ALL SEXES')
+                i += 2
+            else:
+                combined_values.append(temp_values[i])
+                i += 1
+
+        parsed_row.extend(combined_values)
+
+        # Keep row if it has at least one value (including text labels)
+        # This preserves rows like "ALL SEXES - - - - - -" which are valid data
+        if parsed_row and len(parsed_row) > 2:  # At least region, section, and one data field
             parsed_data.append(parsed_row)
+
+    # Prepend REGION and SECTION to headers
+    headers = ['REGION', 'SECTION'] + headers
 
     return headers, parsed_data
 
