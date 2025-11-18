@@ -6,17 +6,10 @@ A user-friendly interface for extracting census/election data from PDFs
 Run with: streamlit run app.py
 """
 
-import sys
-from pathlib import Path
-
-# Add the directory containing this script to Python path
-# This ensures extract_universal.py can be imported regardless of working directory
-SCRIPT_DIR = Path(__file__).parent.absolute()
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
-
 import streamlit as st
 import pandas as pd
+import sys
+from pathlib import Path
 import io
 import time
 import subprocess
