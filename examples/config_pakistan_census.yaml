@@ -1,0 +1,83 @@
+# Configuration for Pakistan Census Data Extraction
+# This example is configured for extracting religion data from Pakistan 2017 census
+
+download:
+  base_url: "https://www.pbs.gov.pk/sites/default/files/population/2017/results/"
+  file_pattern: "{district_code}{data_type}.pdf"
+  district_range: [1, 135]  # District codes from 001 to 135
+  data_type: "09"  # 09 for religion data, 11 for language data
+  output_dir: "./downloads"
+  delay_seconds: 3  # Delay between downloads to avoid overwhelming server
+  verify_ssl: true  # Set to false if SSL certificate issues occur
+  timeout: 30
+
+conversion:
+  output_dir: "./images"
+  image_format: "JPEG"
+  dpi: 300  # Higher DPI = better quality but larger files
+
+ocr:
+  engine: "tesseract"
+  tesseract_config: "--psm 6 --oem 1"
+  # PSM 6: Assume a single uniform block of text
+  # OEM 1: Neural nets LSTM engine only
+  preprocessing:
+    grayscale: true
+    resize_factor: 1.2  # Enlarge images slightly for better OCR
+    interpolation: "cubic"  # cubic, linear, nearest, area, lanczos4
+
+parsing:
+  data_format: "census"
+  keywords:
+    census:
+      - "FR"
+      - "DISTRICT"
+      - "TEHSIL"
+      - "DIVISION"
+      - "AGENCY"
+      - "TALUKA"
+      - "MUSAKHEL"
+      - "DE-EXCLUDED"
+      - "F.R"
+  column_mappings:
+    census_religion_7:
+      - "SEX"
+      - "TOTAL"
+      - "MUSLIM"
+      - "CHRISTIAN"
+      - "HINDU"
+      - "QADIANI/AHMADI"
+      - "CASTE/SCHEDULED"
+    census_religion_8:
+      - "SEX"
+      - "TOTAL"
+      - "MUSLIM"
+      - "CHRISTIAN"
+      - "HINDU"
+      - "QADIANI/AHMADI"
+      - "CASTE/SCHEDULED"
+      - "OTHERS"
+    census_religion_9:
+      - "SEX"
+      - "TOTAL"
+      - "MUSLIM"
+      - "CHRISTIAN"
+      - "HINDU"
+      - "QADIANI/AHMADI"
+      - "CASTE/SCHEDULED"
+      - "OTHERS"
+      - "EXTRACOL"
+  filters:
+    - "OVERALL"
+    - "RURAL"
+    - "URBAN"
+
+export:
+  output_dir: "./output"
+  format: "excel"  # excel, csv, or json
+  output_filename: "pakistan_census_religion"
+
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "extraction.log"
+  console: true

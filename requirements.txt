@@ -1,0 +1,15 @@
+# Core dependencies for PDF data extraction
+requests>=2.31.0
+pdf2image>=1.16.3
+Pillow>=10.0.0
+opencv-python>=4.8.0
+pytesseract>=0.3.10
+pandas>=2.0.0
+openpyxl>=3.1.0
+
+# CLI and configuration
+PyYAML>=6.0.0
+tqdm>=4.65.0
+
+# Optional: For enhanced OCR
+# easyocr>=1.7.0  # Uncomment for alternative OCR engine
