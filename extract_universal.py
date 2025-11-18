@@ -130,6 +130,24 @@ def smart_parse_table(rows: List[List[str]]) -> Tuple[List[str], List[List[Any]]
     if not rows:
         return [], []
 
+    # Detect number format: French (spaces) vs English (commas)
+    # Check first 20 rows for comma patterns
+    uses_french_format = True
+    comma_count = 0
+    number_count = 0
+    for row in rows[:20]:
+        row_text = ' '.join(str(cell) for cell in row)
+        # Count numbers with commas (English format like "1,435,332")
+        comma_numbers = len(re.findall(r'\d{1,3},\d{3}', row_text))
+        comma_count += comma_numbers
+        # Count large numbers (4+ digits)
+        large_numbers = len(re.findall(r'\b\d{4,}\b', row_text))
+        number_count += large_numbers
+
+    # If we have many comma-formatted numbers, it's English format
+    if comma_count >= 3:
+        uses_french_format = False
+
     header_candidates = []
     data_candidates = []
     current_region = None
@@ -280,19 +298,62 @@ def smart_parse_table(rows: List[List[str]]) -> Tuple[List[str], List[List[Any]]
                 # Keep as text (e.g., "ALL", "MALE", "FEMALE")
                 temp_values.append(part_str)
 
-        # Second pass: Combine multi-word patterns
-        # Common patterns: "ALL SEXES", etc.
+        # Second pass: Combine multi-word patterns and French numbers
         combined_values = []
         i = 0
         while i < len(temp_values):
+            # Pattern 1: Combine "ALL SEXES"
             if (i < len(temp_values) - 1 and
                 isinstance(temp_values[i], str) and
                 isinstance(temp_values[i+1], str) and
                 temp_values[i].upper() == 'ALL' and
                 temp_values[i+1].upper() == 'SEXES'):
-                # Combine "ALL" + "SEXES"
                 combined_values.append('ALL SEXES')
                 i += 2
+
+            # Pattern 2: Combine French-formatted numbers (space-separated)
+            # Example: "1 132 655" → 1132655, "350 731" → 350731, "71 148" → 71148
+            # ONLY apply to French-formatted PDFs (detected by lack of commas)
+            # English PDFs with commas don't need this combining
+            elif (uses_french_format and
+                  isinstance(temp_values[i], int) and
+                  temp_values[i] < 1000 and
+                  i < len(temp_values) - 1):
+                first_num = temp_values[i]
+                num_sequence = [first_num]
+                j = i + 1
+
+                # Determine max groups based on first number size
+                # Only allow 3-part numbers (millions) when first number is 1-4
+                # Census data rarely has values over 5 million except total population
+                if first_num <= 4:
+                    max_groups = 2  # e.g., "1 132 655" (millions), but not "5 731 562"
+                elif first_num < 100:
+                    max_groups = 1  # e.g., "71 148" (thousands)
+                else:  # 100-999
+                    max_groups = 1  # e.g., "350 731" (hundreds of thousands)
+
+                # Collect consecutive 3-digit groups
+                collected = 0
+                while (j < len(temp_values) and
+                       isinstance(temp_values[j], int) and
+                       100 <= temp_values[j] <= 999 and
+                       collected < max_groups):
+                    num_sequence.append(temp_values[j])
+                    j += 1
+                    collected += 1
+
+                # If we combined at least 2 numbers, create the combined value
+                if len(num_sequence) >= 2:
+                    combined_num_str = ''.join(str(n).zfill(3) if idx > 0 else str(n)
+                                               for idx, n in enumerate(num_sequence))
+                    combined_num = int(combined_num_str)
+                    combined_values.append(combined_num)
+                    i = j
+                else:
+                    # Single number, keep as-is
+                    combined_values.append(temp_values[i])
+                    i += 1
             else:
                 combined_values.append(temp_values[i])
                 i += 1
