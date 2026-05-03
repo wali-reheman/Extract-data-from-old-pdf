@@ -68,26 +68,27 @@ jobs:
 
       - name: Run extraction on all example PDFs
         run: |
-          for pdf in "example pdf.pdf" "pdf example 3.pdf" "pdf example 4.pdf"; do
-            echo "=== Testing: \$pdf ==="
-            python extract.py "\$pdf" -o "/tmp/test_\${pdf%.pdf}.xlsx" --engine pdfplumber -q
-            if [ -f "/tmp/test_\${pdf%.pdf}.xlsx" ]; then
-              echo "OK: \$pdf → output exists"
-              python -c "import pandas as pd; df=pd.read_excel('/tmp/test_\${pdf%.pdf}.xlsx'); print(f'  rows={len(df)} cols={len(df.columns)}')"
-            else
-              echo "FAIL: \$pdf produced no output"
-              exit 1
-            fi
-          done
+          echo "=== Testing: example pdf.pdf ==="
+          python extract.py "example pdf.pdf" -o /tmp/test_example.xlsx --engine pdfplumber -q
+          test -f /tmp/test_example.xlsx && echo "OK" || exit 1
+          python -c "import pandas as pd; df=pd.read_excel('/tmp/test_example.xlsx'); print(f'  rows={len(df)} cols={len(df.columns)}')"
+
+          echo "=== Testing: pdf example 3.pdf ==="
+          python extract.py "pdf example 3.pdf" -o /tmp/test_example3.xlsx --engine pdfplumber -q
+          test -f /tmp/test_example3.xlsx && echo "OK" || exit 1
+          python -c "import pandas as pd; df=pd.read_excel('/tmp/test_example3.xlsx'); print(f'  rows={len(df)} cols={len(df.columns)}')"
+
+          echo "=== Testing: pdf example 4.pdf ==="
+          python extract.py "pdf example 4.pdf" -o /tmp/test_example4.xlsx --engine pdfplumber -q
+          test -f /tmp/test_example4.xlsx && echo "OK" || exit 1
+          python -c "import pandas as pd; df=pd.read_excel('/tmp/test_example4.xlsx'); print(f'  rows={len(df)} cols={len(df.columns)}')"
 
       - name: Verify all PDFs produce non-empty output
         run: |
-          for pdf in "example pdf.pdf" "pdf example 3.pdf" "pdf example 4.pdf"; do
-            size=$(stat -c%s "/tmp/test_${pdf%.pdf}.xlsx" 2>/dev/null || echo 0)
-            if [ "$size" -gt 100 ]; then
-              echo "✓ ${pdf}: ${size} bytes"
-            else
-              echo "✗ ${pdf}: only ${size} bytes (too small)"
-              exit 1
-            fi
-          done
+          size1=$(stat -c%s /tmp/test_example.xlsx 2>/dev/null || echo 0)
+          size3=$(stat -c%s /tmp/test_example3.xlsx 2>/dev/null || echo 0)
+          size4=$(stat -c%s /tmp/test_example4.xlsx 2>/dev/null || echo 0)
+          echo "example pdf.pdf: $size1 bytes"
+          echo "pdf example 3.pdf: $size3 bytes"
+          echo "pdf example 4.pdf: $size4 bytes"
+          test "$size1" -gt 100 && test "$size3" -gt 100 && test "$size4" -gt 100
