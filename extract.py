@@ -60,17 +60,15 @@ def install_packages(packages: dict, quiet: bool = False) -> None:
 
     if missing:
         print(f"Installing: {', '.join(missing)}")
-        flag = "-q" if quiet else ""
+        cmd = [sys.executable, "-m", "pip", "install", *missing]
+        if quiet:
+            cmd.append("-q")
         try:
-            subprocess.check_call(
-                [sys.executable, "-m", "pip", "install", *missing, flag]
-            )
+            subprocess.check_call(cmd)
         except subprocess.CalledProcessError:
             # PEP 668: externally-managed-environment — try with override
-            subprocess.check_call(
-                [sys.executable, "-m", "pip", "install", *missing, flag,
-                 "--break-system-packages"]
-            )
+            cmd.append("--break-system-packages")
+            subprocess.check_call(cmd)
 
 
 def ensure_ocr_available() -> bool:
@@ -117,6 +115,8 @@ Examples:
                         help="DPI for PDF→image conversion (default: 300)")
     parser.add_argument("--french", action="store_true",
                         help="Assume French number format (space-separated thousands)")
+    parser.add_argument("--lang", default="eng",
+                        help="Tesseract language code(s), e.g. 'eng', 'srp', 'srp+eng' (default: eng)")
     parser.add_argument("--verbose", "-v", action="store_true")
     parser.add_argument("--quiet", "-q", action="store_true")
     return parser
@@ -184,7 +184,7 @@ def extract_pdfplumber(pdf_path: str, verbose: bool = False):
 
 def extract_tesseract(pdf_path: str, preprocess: bool = False,
                        correct_ocr: bool = False, dpi: int = 300,
-                       verbose: bool = False):
+                       verbose: bool = False, lang: str = "eng"):
     """
     Tesseract OCR extraction.
     Optionally preprocesses images before OCR.
@@ -228,8 +228,8 @@ def extract_tesseract(pdf_path: str, preprocess: bool = False,
         img_resized = cv2.resize(img_array, None, fx=1.5, fy=1.5,
                                   interpolation=cv2.INTER_CUBIC)
 
-        # Tesseract with PSM 6 (uniform block of text)
-        text = pytesseract.image_to_string(img_resized, config='--psm 6 --oem 1')
+        # Tesseract with PSM 6 (uniform block of text), lang from arg
+        text = pytesseract.image_to_string(img_resized, lang=lang, config='--psm 6 --oem 1')
 
         # Post-correct OCR
         if corrector:
@@ -493,7 +493,8 @@ def run(pdf_path: str,
         dpi: int = 300,
         french_format: bool = False,
         verbose: bool = False,
-        quiet: bool = False) -> str:
+        quiet: bool = False,
+        lang: str = "eng") -> str:
 
     pdf_path = Path(pdf_path)
     if not pdf_path.exists():
@@ -554,7 +555,8 @@ def run(pdf_path: str,
                                           correct_ocr=correct_ocr, dpi=dpi, verbose=verbose)
     else:
         rows, method = extract_tesseract(str(pdf_path), preprocess=preprocess,
-                                          correct_ocr=correct_ocr, dpi=dpi, verbose=verbose)
+                                          correct_ocr=correct_ocr, dpi=dpi, verbose=verbose,
+                                          lang=lang)
 
     if not quiet:
         print(f"  ✓ {len(rows)} raw rows extracted ({method})\n")
@@ -644,4 +646,5 @@ if __name__ == "__main__":
         french_format=args.french,
         verbose=args.verbose,
         quiet=args.quiet,
+        lang=args.lang,
     )
