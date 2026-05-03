@@ -228,8 +228,9 @@ def extract_tesseract(pdf_path: str, preprocess: bool = False,
         img_resized = cv2.resize(img_array, None, fx=1.5, fy=1.5,
                                   interpolation=cv2.INTER_CUBIC)
 
-        # Tesseract with PSM 6 (uniform block of text), lang from arg
-        text = pytesseract.image_to_string(img_resized, lang=lang, config='--psm 6 --oem 1')
+        # Tesseract: PSM 11 for sparse table text, PSM 6 for dense paragraph text
+        psm = 11
+        text = pytesseract.image_to_string(img_resized, lang=lang, config=f'--psm {psm} --oem 1')
 
         # Post-correct OCR
         if corrector:
