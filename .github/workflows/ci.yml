@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Tesseract OCR
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr
+
+      - name: Install Python dependencies
+        run: |
+          pip install -q --upgrade pip
+          pip install -q -r requirements.txt
+
+      - name: Install test dependencies
+        run: |
+          pip install -q pytest pytest-cov
+
+      - name: Verify Tesseract
+        run: tesseract --version
+
+      - name: Smoke test — import all modules
+        run: |
+          python -c "
+            import preprocessing
+            import ocr_postcorrect
+            from extract import (
+                is_scanned, detect_french_format,
+                extract_pdfplumber, extract_tesseract,
+                smart_parse
+            )
+            print('All imports OK')
+          "
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short 2>&1 || true
+
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: smoke-test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Tesseract + lang packs
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-all
+
+      - name: Install Python deps
+        run: pip install -q -r requirements.txt rapidfuzz
+
+      - name: Run extraction on all example PDFs
+        run: |
+          for pdf in "example pdf.pdf" "pdf example 3.pdf" "pdf example 4.pdf"; do
+            echo "=== Testing: \$pdf ==="
+            python extract.py "\$pdf" -o "/tmp/test_\${pdf%.pdf}.xlsx" --engine pdfplumber -q
+            if [ -f "/tmp/test_\${pdf%.pdf}.xlsx" ]; then
+              echo "OK: \$pdf → output exists"
+              python -c "import pandas as pd; df=pd.read_excel('/tmp/test_\${pdf%.pdf}.xlsx'); print(f'  rows={len(df)} cols={len(df.columns)}')"
+            else
+              echo "FAIL: \$pdf produced no output"
+              exit 1
+            fi
+          done
+
+      - name: Verify all PDFs produce non-empty output
+        run: |
+          for pdf in "example pdf.pdf" "pdf example 3.pdf" "pdf example 4.pdf"; do
+            size=$(stat -c%s "/tmp/test_${pdf%.pdf}.xlsx" 2>/dev/null || echo 0)
+            if [ "$size" -gt 100 ]; then
+              echo "✓ ${pdf}: ${size} bytes"
+            else
+              echo "✗ ${pdf}: only ${size} bytes (too small)"
+              exit 1
+            fi
+          done

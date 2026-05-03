@@ -26,6 +26,10 @@ Originally developed for Pakistan census data, it's now generalized to handle va
 - ✅ **CLI & API**: Use via command line or as a Python library
 - ✅ **Robust**: Retry logic, error handling, and progress tracking
 - ✅ **Well-Documented**: Comprehensive guides and examples
+- ✅ **Unified Extractor**: Single `extract.py` entry point for all engines
+- ✅ **Scanned PDF Pipeline**: Full preprocessing (deskew, adaptive binarization, line removal, border cropping)
+- ✅ **OCR Post-Correction**: Fuzzy vocabulary matching for noisy scan output
+- ✅ **Auto-Detection**: Automatically picks best engine (pdfplumber vs PaddleOCR)
 - 🆕 **Web UI**: Beautiful drag-and-drop interface powered by Streamlit
 - 🆕 **Standalone App**: Create a double-click macOS application
 
@@ -66,7 +70,47 @@ This creates `PDF Data Extractor.app` that:
 
 ---
 
-## Quick Start (Command Line)
+## Quick Start — Unified Extractor (`extract.py`)
+
+The new `extract.py` is the recommended entry point. It auto-detects your PDF type and picks the best engine.
+
+```bash
+# Recommended: auto-detect + full pipeline for scanned PDFs
+python extract.py scanned_census.pdf -o results.xlsx --preprocess --correct-ocr
+
+# Born-digital PDFs (fast, direct text extraction)
+python extract.py born_digital.pdf -o results.xlsx
+
+# Force specific engine
+python extract.py census.pdf --engine paddleocr --preprocess -o output.xlsx
+```
+
+**Full options:**
+```bash
+python extract.py input.pdf [options]
+
+  -o, --output FILE       Output Excel file (default: <input>.xlsx)
+  --engine {auto|pdfplumber|paddleocr|tesseract}
+                          Extraction engine (default: auto)
+  --preprocess            Apply image preprocessing before OCR (for scans)
+  --correct-ocr           Apply fuzzy OCR post-correction
+  --dpi N                 DPI for PDF→image conversion (default: 300)
+  --french                Assume French number format (space-separated thousands)
+  -v, --verbose           Verbose output
+  -q, --quiet             Suppress output
+```
+
+**For scanned/poorly structured PDFs — use `--preprocess --correct-ocr`:**
+- `deskew`: corrects page rotation
+- `border removal`: crops scanner artifacts
+- `adaptive binarization`: Otsu/local threshold for faded pages
+- `line removal`: eliminates table grid lines that confuse OCR
+- `CLAHE contrast`: enhances faded/low-contrast text
+- `fuzzy OCR correction`: fixes character substitution errors (e.g. MUSLIM→MUSSIM)
+
+---
+
+## Quick Start (CLI Package)
 
 ### Installation
 
