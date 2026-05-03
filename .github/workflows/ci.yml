@@ -41,16 +41,7 @@ jobs:
 
       - name: Smoke test — import all modules
         run: |
-          python -c "
-            import preprocessing
-            import ocr_postcorrect
-            from extract import (
-                is_scanned, detect_french_format,
-                extract_pdfplumber, extract_tesseract,
-                smart_parse
-            )
-            print('All imports OK')
-          "
+          python -c "import preprocessing; import ocr_postcorrect; from extract import is_scanned, detect_french_format, extract_pdfplumber, extract_tesseract, smart_parse; print('All imports OK')"
 
       - name: Run tests
         run: pytest tests/ -v --tb=short 2>&1 || true
