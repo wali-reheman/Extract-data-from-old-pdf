@@ -349,156 +349,168 @@ def detect_french_format(rows: list, sample_size: int = 20) -> bool:
 
     return space_triplet_count > comma_count
 
-
 def smart_parse(rows: list, french_format: bool = False) -> tuple[list[str], list[list]]:
     """
-    Parse raw extracted rows into structured (headers, data_rows).
-    Handles census and election data formats.
+    Adaptive table row parser — no hardcoded keywords or document-specific logic.
+
+    Classification strategy (order matters):
+    1. Header rows: mostly word tokens, few/no numbers (can tolerate small numbers
+       like column indices "1 2 3 4" — they're padding, not data values)
+    2. Data rows: contain BOTH text tokens AND large numeric values
+    3. Everything else (section banners, footnotes): skip
     """
     if not rows:
         return [], []
 
     # Clean individual cells: remove cid: font artifacts and collapse newlines
-    # (common in PDFs where ToUnicode maps are corrupted but actual values are intact)
     def clean_cid(text: str) -> str:
         if not isinstance(text, str):
             return text
-        # Collapse newlines (OCR artifact from table cell splitting)
         text = text.replace('\n', ' ').strip()
-        # Remove cid: font artifacts
         text = re.sub(r'\(cid:\d+\)', '', text).strip()
         return text if text else ''
 
     rows = [[clean_cid(c) if isinstance(c, str) else c for c in row] for row in rows]
 
+    # ─── Classify each row ───────────────────────────────────────────────
+    WORD_RE = r'(?:[\w\u0400-\u04FF\u0180-\u024F\u1E00-\u1EFF]{2,}|[\u0600-\u06FF\u0750-\u077F]{2,})'
+    # Large number = 3+ digits (data values), as opposed to small numbers like "1 2 3" (indices)
+    LARGE_NUM_RE = r'\b\d{3,}[,\s\d]*\b'
+    ANY_NUM_RE = r'\b\d{2,}[,\s\d]*\b'
+
     header_candidates = []
     data_candidates = []
-    current_region = None
-    current_section = None
 
     for row in rows:
-        row_text = ' '.join(str(cell) for cell in row if cell)
+        row_text = ' '.join(str(c) for c in row if c)
+        word_tokens = re.findall(WORD_RE, row_text, re.UNICODE)
+        large_nums = re.findall(LARGE_NUM_RE, row_text)
+        any_nums = re.findall(ANY_NUM_RE, row_text)
+        word_count = len(word_tokens)
+        large_num_count = len(large_nums)
+        any_num_count = len(any_nums)
 
-        large_numbers = re.findall(r'\b\d{2,}[,\d]*\b', row_text)
-        numbers_count = len(large_numbers)
-        words = re.findall(r'\b[\w\u0400-\u04FF\u0180-\u024F\u1E00-\u1EFF]{3,}\b', row_text)
-        words_count = len(words)
+        if not row_text.strip():
+            continue
 
-        header_keywords = ['TABLE', 'POPULATION', 'COUNT', 'AREA/', 'REGION',
-                           'DISTRICT', 'COLUMN', 'VOTERS', 'VOTES', 'PERCENTAGE',
-                           'RELIGION', 'CATEGORY', 'TOTAL', 'SEX']
-        section_keywords = ['OVERALL', 'RURAL', 'URBAN', 'DISTRICT', 'DIVISION',
-                           'CONSTITUENCY', 'PROVINCE', 'STATE', 'COUNTY', 'REGION',
-                           'MUNICIPALITY']
-
-        has_header = any(kw in row_text.upper() for kw in header_keywords)
-        is_section = (any(kw in row_text.upper() for kw in section_keywords)
-                      and numbers_count == 0)
-        has_data = (words_count >= 1 and numbers_count >= 1)
-
-        # Always update context before classifying the row
-        # (only when NOT a header — headers with keywords must not pollute region/section)
-        if has_header and numbers_count == 0:
+        # Header: ≥2 words, at most tiny numbers (column indices 1-8) — never large data values
+        if word_count >= 2 and large_num_count == 0:
             header_candidates.append(row)
-        else:
-            if 'DISTRICT' in row_text.upper() or 'DIVISION' in row_text.upper() or 'ОБЛАСТ' in row_text.upper():
-                current_region = row_text
-                current_section = None
-            elif is_section:
-                current_section = row_text
-            elif has_data:
-                data_candidates.append({
-                    'region': current_region,
-                    'section': current_section,
-                    'row': row,
-                })
 
-    # Choose best header
+        # Data row: has ≥1 word AND at least one large (3+ digit) number
+        elif word_count >= 1 and large_num_count >= 1:
+            data_candidates.append({'row': row})
+
+    # ─── Build column headers ─────────────────────────────────────────────
+    # Strategy: pick the longest header candidate that fits within the data column count.
+    # This ensures we prefer multi-cell table-column headers (8 cells) over
+    # document-level titles (1 cell like "TABLE 9 - POPULATION...").
     best_header = None
-    for candidate in header_candidates:
-        candidate_text = ' '.join(str(c) for c in candidate)
-        column_keywords = ['SEX', 'TOTAL', 'MUSLIM', 'CHRISTIAN', 'HINDU',
-                         'MALE', 'FEMALE', 'AREA', 'COUNT', 'VOTES', 'VOTERS']
-        keyword_matches = sum(1 for kw in column_keywords if kw in candidate_text.upper())
-        if keyword_matches >= 3:
-            best_header = candidate
-            break
+    if header_candidates:
+        data_width = max(len(r) for r in rows) if rows else 0
+        # Filter to candidates that fit within data width
+        fitting = [c for c in header_candidates if len(c) <= data_width]
+        if fitting:
+            best_header = max(fitting, key=len)
+        else:
+            # No header fits within data width — take the shortest one
+            best_header = min(header_candidates, key=len)
 
-    if best_header:
-        header_text = ' '.join(str(c) for c in best_header)
+    def _is_garbled_header_row(candidate: list) -> bool:
+        """
+        A garbled header row is one where most cells are EITHER:
+        (a) pure numbers (data row mistakenly classified as header), OR
+        (b) garbage text (cid: artifacts where no Unicode letters survive)
+        """
+        if not candidate:
+            return False
+        cell_strs = [str(c) for c in candidate if c]
+        if not cell_strs:
+            return False
+
+        # (a) mostly pure numbers
+        numeric_cells = sum(
+            1 for c in cell_strs
+            if c.replace(',', '').replace(' ', '').replace('.', '').isdigit()
+        )
+        if numeric_cells / len(cell_strs) >= 0.5:
+            return True
+
+        # (b) mostly cells with very few meaningful letters (1-2 chars — too short to be real labels)
+        tiny_cells = sum(
+            1 for c in cell_strs
+            if len(re.findall(r'[\w\u0400-\u04FF\u0600-\u06FF]', c)) <= 2
+        )
+        if tiny_cells / len(cell_strs) >= 0.30:
+            return True
+
+        return False
+
+    garbled_header = best_header and _is_garbled_header_row(best_header)
+
+    if best_header and not garbled_header:
+        header_text = ' '.join(str(c) for c in best_header if c)
         parts = re.split(r'\s{2,}', header_text)
         if len(parts) < 3:
             parts = header_text.split()
-        combined = []
-        i = 0
-        while i < len(parts):
-            if (i < len(parts) - 1 and len(parts[i]) <= 6 and '/' in parts[i]):
-                combined.append(parts[i] + parts[i+1])
-                i += 2
-            else:
-                combined.append(parts[i])
-                i += 1
-        headers = [h.strip() for h in combined if h.strip()]
+        headers = [h.strip() for h in parts if h.strip()]
+    elif data_candidates and garbled_header:
+        # No readable header — use generic column names and treat all data rows normally
+        n_data_cols = max(len(item['row']) for item in data_candidates)
+        headers = [f'Column_{i+1}' for i in range(n_data_cols)]
     else:
-        max_cols = max(len(row) for row in rows) if rows else 0
+        max_cols = max(len(r) for r in rows) if rows else 0
         headers = [f'Column_{i+1}' for i in range(max_cols)]
 
-    # Parse data rows
+    # ─── Parse data rows ─────────────────────────────────────────────────
+    n_cols = len(headers)
     parsed_data = []
+
     for item in data_candidates:
-        row = item.get('row', item)
-        region = item.get('region', '')
-        section = item.get('section', '')
+        row = item['row']
 
+        # Single-cell row: pdfplumber's text fallback sometimes concatenates all
+        # table cells into one string (especially for rotated/multi-column layouts).
+        # Strategy: split ONLY when the number of space-separated parts closely
+        # matches the expected column count from the header.
         if len(row) == 1:
-            parts = re.split(r'(\s+)', str(row[0]))
-            parts = [p.strip() for p in parts if p.strip()]
+            single = str(row[0])
+            space_parts = single.split()
+            # Split if part count is close to the expected column count
+            # (within ±3 columns) AND has at least 2 parts
+            if len(space_parts) >= 2 and abs(len(space_parts) - n_cols) <= 3:
+                parts = space_parts
+            else:
+                parts = [single]
         else:
-            parts = row
+            parts = list(row)
 
-        parsed_row = [region or '', section or '']
-
+        parsed_row = []
         for part in parts:
             part_str = str(part).strip()
             if not part_str:
                 continue
 
-            # Clean numbers
             clean = part_str.replace(',', '').replace(' ', '')
+            for old, new in [('O', '0'), ('o', '0'), ('l', '1'), ('I', '1'),
+                              ('S', '5'), ('Z', '2'), ('B', '8'), ('q', '9')]:
+                clean = clean.replace(old, new)
 
-            # OCR corrections for numbers
-            clean = clean.replace('O', '0').replace('o', '0')
-            clean = clean.replace('l', '1').replace('I', '1')
-            clean = clean.replace('S', '5').replace('Z', '2')
-
-            if clean == '-' or clean == '—':
+            if clean in ('-', '—', '–', '∗', '*', ''):
                 parsed_row.append(None)
             elif clean.isdigit():
                 parsed_row.append(int(clean))
             else:
-                # French number combining
-                if french_format and isinstance(parsed_row[-1], int) if parsed_row else False:
-                    pass  # French number logic handled separately
                 parsed_row.append(part_str)
 
-        if len(parsed_row) > 2:
+        if len(parsed_row) >= 1:
             parsed_data.append(parsed_row)
 
-    # Only prepend REGION/SECTION context columns if at least one row has them set
-    has_region = any(row[0] for row in parsed_data)
-    has_section = any(row[1] for row in parsed_data)
-
-    if has_region or has_section:
-        headers = ['REGION', 'SECTION'] + headers
-    else:
-        # Strip context prefix from all data rows
-        parsed_data = [row[2:] for row in parsed_data]
-
-    # Pad rows to match header count
-    max_cols = len(headers)
-    for row in parsed_data:
-        while len(row) < max_cols:
-            row.append(None)
+    # Pad / trim rows to match header count
+    parsed_data = [
+        (row + [None] * (n_cols - len(row)))[:n_cols]
+        for row in parsed_data
+    ]
 
     return headers, parsed_data
 
