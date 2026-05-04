@@ -228,9 +228,8 @@ def extract_tesseract(pdf_path: str, preprocess: bool = False,
         img_resized = cv2.resize(img_array, None, fx=1.5, fy=1.5,
                                   interpolation=cv2.INTER_CUBIC)
 
-        # Tesseract: PSM 11 for sparse table text, PSM 6 for dense paragraph text
-        psm = 11
-        text = pytesseract.image_to_string(img_resized, lang=lang, config=f'--psm {psm} --oem 1')
+        # Tesseract: PSM 6 for uniform table blocks (default), PSM 11 for sparse text
+        text = pytesseract.image_to_string(img_resized, lang=lang, config='--psm 6 --oem 1')
 
         # Post-correct OCR
         if corrector:
@@ -359,6 +358,19 @@ def smart_parse(rows: list, french_format: bool = False) -> tuple[list[str], lis
     if not rows:
         return [], []
 
+    # Clean individual cells: remove cid: font artifacts and collapse newlines
+    # (common in PDFs where ToUnicode maps are corrupted but actual values are intact)
+    def clean_cid(text: str) -> str:
+        if not isinstance(text, str):
+            return text
+        # Collapse newlines (OCR artifact from table cell splitting)
+        text = text.replace('\n', ' ').strip()
+        # Remove cid: font artifacts
+        text = re.sub(r'\(cid:\d+\)', '', text).strip()
+        return text if text else ''
+
+    rows = [[clean_cid(c) if isinstance(c, str) else c for c in row] for row in rows]
+
     header_candidates = []
     data_candidates = []
     current_region = None
@@ -369,7 +381,7 @@ def smart_parse(rows: list, french_format: bool = False) -> tuple[list[str], lis
 
         large_numbers = re.findall(r'\b\d{2,}[,\d]*\b', row_text)
         numbers_count = len(large_numbers)
-        words = re.findall(r'\b[A-Za-z]{3,}\b', row_text)
+        words = re.findall(r'\b[\w\u0400-\u04FF\u0180-\u024F\u1E00-\u1EFF]{3,}\b', row_text)
         words_count = len(words)
 
         header_keywords = ['TABLE', 'POPULATION', 'COUNT', 'AREA/', 'REGION',
@@ -384,20 +396,22 @@ def smart_parse(rows: list, french_format: bool = False) -> tuple[list[str], lis
                       and numbers_count == 0)
         has_data = (words_count >= 1 and numbers_count >= 1)
 
+        # Always update context before classifying the row
+        # (only when NOT a header — headers with keywords must not pollute region/section)
         if has_header and numbers_count == 0:
             header_candidates.append(row)
-        elif is_section:
-            if 'DISTRICT' in row_text.upper() or 'DIVISION' in row_text.upper():
+        else:
+            if 'DISTRICT' in row_text.upper() or 'DIVISION' in row_text.upper() or 'ОБЛАСТ' in row_text.upper():
                 current_region = row_text
                 current_section = None
-            else:
+            elif is_section:
                 current_section = row_text
-        elif has_data:
-            data_candidates.append({
-                'region': current_region,
-                'section': current_section,
-                'row': row,
-            })
+            elif has_data:
+                data_candidates.append({
+                    'region': current_region,
+                    'section': current_section,
+                    'row': row,
+                })
 
     # Choose best header
     best_header = None
@@ -470,8 +484,15 @@ def smart_parse(rows: list, french_format: bool = False) -> tuple[list[str], lis
         if len(parsed_row) > 2:
             parsed_data.append(parsed_row)
 
-    # Prepend context columns
-    headers = ['REGION', 'SECTION'] + headers
+    # Only prepend REGION/SECTION context columns if at least one row has them set
+    has_region = any(row[0] for row in parsed_data)
+    has_section = any(row[1] for row in parsed_data)
+
+    if has_region or has_section:
+        headers = ['REGION', 'SECTION'] + headers
+    else:
+        # Strip context prefix from all data rows
+        parsed_data = [row[2:] for row in parsed_data]
 
     # Pad rows to match header count
     max_cols = len(headers)
